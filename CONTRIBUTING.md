@@ -1,4 +1,4 @@
-# Contributing to the Steps core library
+# Contributing to the Steppy core library
 
 Here, at [minerva.ml](https://minerva.ml) we are creating Steppy - lightweight, open-source, Python library for fast and reproducible experimentation.
 
