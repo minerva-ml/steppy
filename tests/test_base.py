@@ -2,7 +2,9 @@ import numpy as np
 import pytest
 
 from steppy.base import Step, IdentityOperation, StepsError, make_transformer
-from .steppy_test_utils import CACHE_DIRPATH
+from steppy.adapter import Adapter, E
+
+from .steppy_test_utils import EXP_DIR
 
 
 @pytest.fixture
@@ -50,7 +52,7 @@ def test_inputs_without_conflicting_names_do_not_require_adapter(data):
         name='test_inputs_without_conflicting_names_do_not_require_adapter_1',
         transformer=IdentityOperation(),
         input_data=['input_1'],
-        cache_dirpath=CACHE_DIRPATH
+        experiment_directory=EXP_DIR
     )
     output = step.fit_transform(data)
     assert output == data['input_1']
@@ -59,7 +61,7 @@ def test_inputs_without_conflicting_names_do_not_require_adapter(data):
         name='test_inputs_without_conflicting_names_do_not_require_adapter_2',
         transformer=IdentityOperation(),
         input_data=['input_1', 'input_2'],
-        cache_dirpath=CACHE_DIRPATH
+        experiment_directory=EXP_DIR
     )
     output = step.fit_transform(data)
     assert output == {**data['input_1'], **data['input_2']}
@@ -70,7 +72,30 @@ def test_inputs_with_conflicting_names_require_adapter(data):
         name='test_inputs_with_conflicting_names_require_adapter',
         transformer=IdentityOperation(),
         input_data=['input_1', 'input_3'],
-        cache_dirpath=CACHE_DIRPATH
+        experiment_directory=EXP_DIR
     )
     with pytest.raises(StepsError):
         step.fit_transform(data)
+
+def test_step_with_adapted_inputs(data):
+    step = Step(
+        name='test_step_wit_adapted_inputs',
+        transformer=IdentityOperation(),
+        input_data=['input_1', 'input_3'],
+        experiment_directory=EXP_DIR,
+        adapter=Adapter({
+            'img': E('input_3', 'images'),
+            'fea': E('input_1', 'features'),
+            'l1': E('input_3', 'labels'),
+            'l2': E('input_1', 'labels'),
+        })
+    )
+    output = step.fit_transform(data)
+    expected = {
+        'img': data['input_3']['images'],
+        'fea': data['input_1']['features'],
+        'l1': data['input_3']['labels'],
+        'l2': data['input_1']['labels'],
+    }
+    assert output == expected
+
