@@ -1,4 +1,5 @@
 # Steppy
+[![license](https://img.shields.io/github/license/mashape/apistatus.svg?maxAge=2592000)](https://github.com/minerva-ml/steppy/blob/master/LICENSE)
 
 ### What is Steppy?
 Steppy is a lightweight, open-source, Python 3 library for fast and reproducible experimentation. It lets data scientist focus on data science, not on software development issues. Steppy's minimal interface does not impose constraints, however, enables clean machine learning pipeline design.
