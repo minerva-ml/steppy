@@ -160,6 +160,7 @@ class Step:
             ``experiment_directory``.
             Default ``False``: do not persist upstream pipeline structure.
     """
+
     def __init__(self,
                  name,
                  transformer,
@@ -167,6 +168,7 @@ class Step:
                  input_data=None,
                  input_steps=None,
                  adapter=None,
+                 is_trainable=False,
                  cache_output=False,
                  persist_output=False,
                  load_persisted_output=False,
@@ -175,28 +177,29 @@ class Step:
 
         assert isinstance(name, str), 'Step name must be str, got {} instead.'.format(type(name))
         assert isinstance(experiment_directory, str), 'Step {} error, experiment_directory must ' \
-            'be str, got {} instead.'.format(name, type(experiment_directory))
+                                                      'be str, got {} instead.'.format(name, type(experiment_directory))
 
         if input_data is not None:
             assert isinstance(input_data, list), 'Step {} error, input_data must be list, ' \
-                'got {} instead.'.format(name, type(input_data))
+                                                 'got {} instead.'.format(name, type(input_data))
         if input_steps is not None:
             assert isinstance(input_steps, list), 'Step {} error, input_steps must be list, ' \
-                'got {} instead.'.format(name, type(input_steps))
+                                                  'got {} instead.'.format(name, type(input_steps))
         if adapter is not None:
             assert isinstance(adapter, Adapter), 'Step {} error, adapter must be an instance ' \
-                'of {}'.format(name, str(Adapter))
+                                                 'of {}'.format(name, str(Adapter))
 
         assert isinstance(cache_output, bool), 'Step {} error, cache_output must be bool, ' \
-            'got {} instead.'.format(name, type(cache_output))
+                                               'got {} instead.'.format(name, type(cache_output))
         assert isinstance(persist_output, bool), 'Step {} error, persist_output must be bool, ' \
-            'got {} instead.'.format(name, type(persist_output))
+                                                 'got {} instead.'.format(name, type(persist_output))
         assert isinstance(load_persisted_output, bool), 'Step {} error, load_persisted_output ' \
-            'must be bool, got {} instead.'.format(name, type(load_persisted_output))
+                                                        'must be bool, got {} instead.'.format(name, type(
+            load_persisted_output))
         assert isinstance(force_fitting, bool), 'Step {} error, force_fitting must be bool, ' \
-            'got {} instead.'.format(name, type(force_fitting))
+                                                'got {} instead.'.format(name, type(force_fitting))
         assert isinstance(persist_upstream_pipeline_structure, bool), 'Step {} error, ' \
-            'persist_upstream_pipeline_structure must be bool, got {} instead.'\
+                                                                      'persist_upstream_pipeline_structure must be bool, got {} instead.' \
             .format(name, type(persist_upstream_pipeline_structure))
 
         logger.info('initializing Step {}...'.format(name))
@@ -208,6 +211,7 @@ class Step:
         self.input_data = input_data or []
         self.adapter = adapter
 
+        self.is_trainable = is_trainable
         self.cache_output = cache_output
         self.persist_output = persist_output
         self.load_persisted_output = load_persisted_output
@@ -427,18 +431,22 @@ class Step:
         logger.info('done: initializing experiment directories')
 
     def _cached_fit_transform(self, step_inputs):
-        if self.transformer_is_cached and not self.force_fitting:
-            logger.info('Step {}, loading transformer from the {}'
-                        .format(self.name, self.exp_dir_transformers_step))
-            self.transformer.load(self.exp_dir_transformers_step)
+        if self.is_trainable:
+            if self.transformer_is_cached and not self.force_fitting:
+                logger.info('Step {}, loading transformer from the {}'
+                            .format(self.name, self.exp_dir_transformers_step))
+                self.transformer.load(self.exp_dir_transformers_step)
+                logger.info('Step {}, transforming...'.format(self.name))
+                step_output_data = self.transformer.transform(**step_inputs)
+            else:
+                logger.info('Step {}, fitting and transforming...'.format(self.name))
+                step_output_data = self.transformer.fit_transform(**step_inputs)
+                logger.info('Step {}, persisting transformer to the {}'
+                            .format(self.name, self.exp_dir_transformers_step))
+                self.transformer.persist(self.exp_dir_transformers_step)
+        else:
             logger.info('Step {}, transforming...'.format(self.name))
             step_output_data = self.transformer.transform(**step_inputs)
-        else:
-            logger.info('Step {}, fitting and transforming...'.format(self.name))
-            step_output_data = self.transformer.fit_transform(**step_inputs)
-            logger.info('Step {}, persisting transformer to the {}'
-                        .format(self.name, self.exp_dir_transformers_step))
-            self.transformer.persist(self.exp_dir_transformers_step)
 
         if self.cache_output:
             logger.info('Step {}, caching output to the {}'
@@ -458,14 +466,19 @@ class Step:
         joblib.dump(output_data, filepath)
 
     def _cached_transform(self, step_inputs):
-        if self.transformer_is_cached:
-            logger.info('Step {}, loading transformer from the {}'
-                        .format(self.name, self.exp_dir_transformers_step))
-            self.transformer.load(self.exp_dir_transformers_step)
+        if self.is_trainable:
+            if self.transformer_is_cached:
+                logger.info('Step {}, loading transformer from the {}'
+                            .format(self.name, self.exp_dir_transformers_step))
+                self.transformer.load(self.exp_dir_transformers_step)
+                logger.info('Step {}, transforming...'.format(self.name))
+                step_output_data = self.transformer.transform(**step_inputs)
+            else:
+                raise ValueError('No transformer cached {}'.format(self.name))
+        else:
             logger.info('Step {}, transforming...'.format(self.name))
             step_output_data = self.transformer.transform(**step_inputs)
-        else:
-            raise ValueError('No transformer cached {}'.format(self.name))
+
         if self.cache_output:
             logger.info('Step {}, caching output to the {}'
                         .format(self.name, self.exp_dir_cache_step))
@@ -498,9 +511,9 @@ class Step:
         if len(repeated_keys) == 0:
             return unpacked_steps
         else:
-            msg = "Could not unpack inputs. Following keys are present in multiple input steps:\n"\
-                "\n".join(["  '{}' present in steps {}".format(key, step_names)
-                           for key, step_names in repeated_keys])
+            msg = "Could not unpack inputs. Following keys are present in multiple input steps:\n" \
+                  "\n".join(["  '{}' present in steps {}".format(key, step_names)
+                             for key, step_names in repeated_keys])
             raise StepsError(msg)
 
     def _get_steps(self, all_steps):
@@ -620,6 +633,7 @@ class BaseTransformer:
 class IdentityOperation(BaseTransformer):
     """Transformer that performs identity operation, f(x)=x.
     """
+
     def transform(self, **kwargs):
         return kwargs
 
@@ -632,4 +646,5 @@ def make_transformer(func):
     class StaticTransformer(BaseTransformer):
         def transform(self, *args, **kwargs):
             return func(*args, **kwargs)
+
     return StaticTransformer()
