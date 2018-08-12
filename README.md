@@ -2,12 +2,20 @@
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg?maxAge=2592000)](https://github.com/minerva-ml/steppy/blob/master/LICENSE)
 
 ### What is Steppy?
-Steppy is a lightweight, open-source, Python 3 library for fast and reproducible experimentation. It lets data scientist focus on data science, not on software development issues. Steppy's minimal interface does not impose constraints, however, enables clean machine learning pipeline design.
+1. Steppy is a lightweight, open-source, Python 3 library for fast and reproducible experimentation.
+1. Steppy lets data scientist focus on data science, not on software development issues.
+1. Steppy's minimal interface does not impose constraints, however, enables clean machine learning pipeline design.
 
 ### What problem steppy solves?
-In the course of the project, data scientist faces multiple problems. Difficulties with reproducibility and lack of the ability to prepare experiments quickly are two particular examples. Steppy address both problems by introducing two simple abstractions: `Step` and `Tranformer`. We consider it minimal interface for building machine learning pipelines.
+#### Problems
+In the course of the project, data scientist faces two problems:
+1. Difficulties with reproducibility in data science / machine learning projects.
+1. Lack of the ability to prepare or extend experiments quickly.
 
-`Step` is a wrapper over the transformer and handles multiple aspects of the execution of the pipeline, such as saving intermediate results (if needed), checkpoiting the model during training and much more. `Tranformer` in turn, is purely computational, data scientist-defined piece that takes an input data and produces some output data. Typical Transformers are neural netowrk, machine learning algorithms and pre- or post-processing routines.
+#### Solution
+Steppy address both problems by introducing two simple abstractions: `Step` and `Tranformer`. We consider it minimal interface for building machine learning pipelines.
+1. `Step` is a wrapper over the transformer and handles multiple aspects of the execution of the pipeline, such as saving intermediate results (if needed), checkpoiting the model during training and much more.
+1. `Tranformer` in turn, is purely computational, data scientist-defined piece that takes an input data and produces some output data. Typical Transformers are neural netowrk, machine learning algorithms and pre- or post-processing routines.
 
 ### Start using steppy
 #### Installation
