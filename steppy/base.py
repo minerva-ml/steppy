@@ -655,5 +655,6 @@ def make_transformer(func):
     class StaticTransformer(BaseTransformer):
         def transform(self, *args, **kwargs):
             return func(*args, **kwargs)
-
-    return StaticTransformer()
+    _transformer = StaticTransformer()
+    _transformer.__class__.__name__ = func.__name__
+    return _transformer
