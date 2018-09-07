@@ -268,7 +268,7 @@ class Step:
         return all_steps
 
     @property
-    def transformer_is_cached(self):
+    def transformer_is_persisted(self):
         """(bool): True if transformer exists under the directory
         ``<experiment_directory>/transformers/<step_name>``
         """
@@ -441,7 +441,7 @@ class Step:
 
     def _cached_fit_transform(self, step_inputs):
         if self.is_trainable:
-            if self.transformer_is_cached and not self.force_fitting:
+            if self.transformer_is_persisted and not self.force_fitting:
                 logger.info('Step {}, loading transformer from the {}'
                             .format(self.name, self.exp_dir_transformers_step))
                 self.transformer.load(self.exp_dir_transformers_step)
@@ -476,7 +476,7 @@ class Step:
 
     def _cached_transform(self, step_inputs):
         if self.is_trainable:
-            if self.transformer_is_cached:
+            if self.transformer_is_persisted:
                 logger.info('Step {}, loading transformer from the {}'
                             .format(self.name, self.exp_dir_transformers_step))
                 self.transformer.load(self.exp_dir_transformers_step)
