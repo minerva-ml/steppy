@@ -28,17 +28,20 @@ class Step:
     (see: :func:`~steppy.utils.persist_as_png`) or return step in a jupyter notebook cell.
 
     Attributes:
-        name (str): Step name.
-            Each step in a pipeline must have a unique name. This names is used to persist or cache
-            transformers and outputs of this Step.
-
         transformer (obj): object that inherits from BaseTransformer or Step instance.
             When Step instance is passed, transformer from that Step will be copied and used to
             perform transformations. It is useful when both train and valid data are passed in
             one pipeline (common situation in deep learning).
 
+        name (str): Step name.
+            Each step in a pipeline must have a unique name. This names is used to persist or cache
+            transformers and outputs of this Step.
+            Default is transformer's class name
+
         experiment_directory (str): path to the directory where all execution artifacts will be
-            stored. The following sub-directories will be created, if they were not created by
+            stored.
+            Default is ``/~/.steppy/``.
+            The following sub-directories will be created, if they were not created by
             other Steps:
 
             * transformers: transformer objects are persisted in this folder
@@ -162,9 +165,9 @@ class Step:
     """
 
     def __init__(self,
-                 name,
                  transformer,
-                 experiment_directory,
+                 name=None,
+                 experiment_directory=None,
                  input_data=None,
                  input_steps=None,
                  adapter=None,
@@ -175,9 +178,17 @@ class Step:
                  force_fitting=False,
                  persist_upstream_pipeline_structure=False):
 
-        assert isinstance(name, str), 'Step name must be str, got {} instead.'.format(type(name))
-        assert isinstance(experiment_directory, str), 'Step {} error, experiment_directory must ' \
-                                                      'be str, got {} instead.'.format(name, type(experiment_directory))
+        if name:
+            assert isinstance(name, str), 'Step name must be str, got {} instead.'.format(type(name))
+        else:
+            name = transformer.__class__.__name__
+
+        if experiment_directory:
+            assert isinstance(experiment_directory, str), 'Step {} error, experiment_directory must ' \
+                                                          'be str, got {} instead.'.format(name,
+                                                                                           type(experiment_directory))
+        else:
+            experiment_directory = os.path.join(os.path.expanduser("~"), '.steppy')
 
         if input_data is not None:
             assert isinstance(input_data, list), 'Step {} error, input_data must be list, ' \
@@ -194,8 +205,8 @@ class Step:
         assert isinstance(persist_output, bool), 'Step {} error, persist_output must be bool, ' \
                                                  'got {} instead.'.format(name, type(persist_output))
         assert isinstance(load_persisted_output, bool), 'Step {} error, load_persisted_output ' \
-                                                        'must be bool, got {} instead.'.format(name, type(
-            load_persisted_output))
+                                                        'must be bool, got {} instead.'.format(name,
+                                                                                               type(load_persisted_output))
         assert isinstance(force_fitting, bool), 'Step {} error, force_fitting must be bool, ' \
                                                 'got {} instead.'.format(name, type(force_fitting))
         assert isinstance(persist_upstream_pipeline_structure, bool), 'Step {} error, ' \
@@ -427,8 +438,6 @@ class Step:
         self.exp_dir_transformers_step = os.path.join(self.exp_dir_transformers, self.name)
         self.exp_dir_outputs_step = os.path.join(self.exp_dir_outputs, '{}'.format(self.name))
         self.exp_dir_cache_step = os.path.join(self.exp_dir_cache, '{}'.format(self.name))
-
-        logger.info('done: initializing experiment directories')
 
     def _cached_fit_transform(self, step_inputs):
         if self.is_trainable:
