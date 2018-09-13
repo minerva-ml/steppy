@@ -178,10 +178,7 @@ class Step:
                  force_fitting=False,
                  persist_upstream_pipeline_structure=False):
 
-        if name:
-            assert isinstance(name, str), 'Step name must be str, got {} instead.'.format(type(name))
-        else:
-            name = transformer.__class__.__name__
+        name = self._validate_name(name, transformer)
 
         if experiment_directory:
             assert isinstance(experiment_directory, str), 'Step {} error, experiment_directory must ' \
@@ -530,6 +527,20 @@ class Step:
             all_steps = input_step._get_steps(all_steps)
         all_steps[self.name] = self
         return all_steps
+
+    def _validate_name(self, name, transformer):
+        if name:
+            assert isinstance(name, str), 'Step name must be str, got {} instead.'.format(type(name))
+        else:
+            name = transformer.__class__.__name__
+        highest_id = 0
+        for key in self.all_steps.keys():
+            key_id = key.split('_')[-1]
+            key_stripped = key[:-len(key_id) - 1]
+            if key_stripped == name:
+                if key_id > highest_id:
+                    highest_id += 1
+        return '{}_{}'.format(name, highest_id)
 
     def _build_structure_dict(self, structure_dict):
         for input_step in self.input_steps:
