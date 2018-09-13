@@ -1,4 +1,4 @@
-import glob
+import gc
 import os
 import pprint
 import shutil
@@ -34,21 +34,19 @@ class Step:
             one pipeline (common situation in deep learning).
 
         name (str): Step name.
-            Each step in a pipeline must have a unique name. This names is used to persist or cache
+            Each step in a pipeline must have a unique name. It is name of the persisted
             transformers and outputs of this Step.
-            Default is transformer's class name
+            Default is transformer's class name.
 
         experiment_directory (str): path to the directory where all execution artifacts will be
             stored.
-            Default is ``/~/.steppy/``.
+            Default is ``~/.steppy``.
             The following sub-directories will be created, if they were not created by
             other Steps:
 
             * transformers: transformer objects are persisted in this folder
             * outputs:      step output dictionaries are persisted in this folder
               (if ``persist_output=True``)
-            * cache:        step output dictionaries are cached in this folder
-              (if ``cache_output=True``).
 
         input_data (list): Elements of this list are keys in the data dictionary that is passed
             to the Step's `fit_transform` and `transform` methods.
@@ -114,15 +112,14 @@ class Step:
                 where both `images` and `labels` keys comes from `input`
                 (see :attr:`~steppy.base.Step.input_data`)
 
-        cache_output (bool): If True, Step output dictionary will be cached to the
-            ``<experiment_directory>/cache/<name>``, when transform method of the Step transformer
+        cache_output (bool): If True, Step output dictionary will be cached under
+            ``self.output``, when transform method of the Step transformer
             is completed. If the same Step is used multiple times, transform method is invoked
-            only once. Further invokes simply load output from the
-            ``<experiment_directory>/cache/<name>`` directory.
+            only once. Further invokes simply use cached output.
             Default ``False``: do not cache outputs
 
             Warning:
-                One should always run `pipeline.clean_cache()` before executing
+                One should always run `pipeline.clean_cache_pipeline()` before executing
                 `pipeline.fit_transform(data)` or `pipeline.transform(data)`
                 When working with large datasets, cache might be very large.
 
@@ -139,7 +136,7 @@ class Step:
                 When working with large datasets, cache might be very large.
 
         load_persisted_output (bool): If True, Step output dictionary already persisted to the
-            ``<experiment_directory>/cache/<name>`` will be loaded when Step is called.
+            ``<experiment_directory>/output/<name>`` will be loaded when Step is called.
             Default ``False``: do not load persisted output.
             Useful when debugging and working with ensemble models or time consuming feature
             extraction. One can easily persist already computed pieces of the pipeline and save
@@ -181,9 +178,9 @@ class Step:
         name = self._validate_name(name, transformer)
 
         if experiment_directory:
-            assert isinstance(experiment_directory, str), 'Step {} error, experiment_directory must ' \
-                                                          'be str, got {} instead.'.format(name,
-                                                                                           type(experiment_directory))
+            assert isinstance(experiment_directory, str),\
+                'Step {} error, experiment_directory must ' \
+                'be str, got {} instead.'.format(name, type(experiment_directory))
         else:
             experiment_directory = os.path.join(os.path.expanduser("~"), '.steppy')
 
@@ -201,13 +198,13 @@ class Step:
                                                'got {} instead.'.format(name, type(cache_output))
         assert isinstance(persist_output, bool), 'Step {} error, persist_output must be bool, ' \
                                                  'got {} instead.'.format(name, type(persist_output))
-        assert isinstance(load_persisted_output, bool), 'Step {} error, load_persisted_output ' \
-                                                        'must be bool, got {} instead.'.format(name,
-                                                                                               type(load_persisted_output))
+        assert isinstance(load_persisted_output, bool),\
+            'Step {} error, load_persisted_output ' \
+            'must be bool, got {} instead.'.format(name, type(load_persisted_output))
         assert isinstance(force_fitting, bool), 'Step {} error, force_fitting must be bool, ' \
                                                 'got {} instead.'.format(name, type(force_fitting))
-        assert isinstance(persist_upstream_pipeline_structure, bool), 'Step {} error, ' \
-                                                                      'persist_upstream_pipeline_structure must be bool, got {} instead.' \
+        assert isinstance(persist_upstream_pipeline_structure, bool),\
+            'Step {} error, persist_upstream_pipeline_structure must be bool, got {} instead.' \
             .format(name, type(persist_upstream_pipeline_structure))
 
         logger.info('initializing Step {}...'.format(name))
@@ -218,14 +215,14 @@ class Step:
         self.input_steps = input_steps or []
         self.input_data = input_data or []
         self.adapter = adapter
-
         self.is_trainable = is_trainable
         self.cache_output = cache_output
         self.persist_output = persist_output
         self.load_persisted_output = load_persisted_output
         self.force_fitting = force_fitting
-
         self.exp_dir = os.path.join(experiment_directory)
+        self.output = None
+
         self._prepare_experiment_directories()
 
         if persist_upstream_pipeline_structure:
@@ -275,10 +272,13 @@ class Step:
 
     @property
     def output_is_cached(self):
-        """(bool): True if step outputs exists under the ``<experiment_directory>/cache/<name>``.
+        """(bool): True if step outputs exists under the ``self.output``.
             See `cache_output`.
         """
-        return os.path.exists(self.exp_dir_cache_step)
+        if self.output:
+            return True
+        else:
+            return False
 
     @property
     def output_is_persisted(self):
@@ -310,8 +310,8 @@ class Step:
             dict: Step outputs from the ``self.transformer.fit_transform`` method
         """
         if self.output_is_cached and not self.force_fitting:
-            logger.info('Step {} loading cached output...'.format(self.name))
-            step_output_data = self._load_output(self.exp_dir_cache_step)
+            logger.info('Step {} using cached output...'.format(self.name))
+            step_output_data = self.output
         elif self.output_is_persisted and self.load_persisted_output and not self.force_fitting:
             logger.info('Step {} loading persisted output...'.format(self.name))
             step_output_data = self._load_output(self.exp_dir_outputs_step)
@@ -357,8 +357,8 @@ class Step:
             dict: step outputs from the transformer.transform method
         """
         if self.output_is_cached:
-            logger.info('Step {} loading cached output...'.format(self.name))
-            step_output_data = self._load_output(self.exp_dir_cache_step)
+            logger.info('Step {} using cached output...'.format(self.name))
+            step_output_data = self.output
         elif self.output_is_persisted and self.load_persisted_output:
             logger.info('Step {} loading persisted output...'.format(self.name))
             step_output_data = self._load_output(self.exp_dir_outputs_step)
@@ -378,15 +378,19 @@ class Step:
             step_output_data = self._cached_transform(step_inputs)
         return step_output_data
 
-    def clean_cache(self):
-        """Removes everything from the directory ``<experiment_directory>/cache``.
+    def clean_cache_current_step(self):
+        """Clean cache for current step.
         """
         logger.info('cleaning cache...')
-        paths = glob.glob(os.path.join(self.exp_dir_cache, '*'))
-        for path in paths:
-            logger.info('removing {}'.format(path))
-            os.remove(path)
-        logger.info('cleaning cache done')
+        self.output = None
+        gc.collect()
+
+    def clean_cache_pipeline(self):
+        """Clean cache for all steps that are upstream to `self`.
+        """
+        for step in self.all_steps.values():
+            step.output = None
+            gc.collect()
 
     def get_step(self, name):
         """Extracts step by name from the pipeline.
@@ -423,18 +427,16 @@ class Step:
         shutil.copyfile(original_filepath, copy_filepath)
 
     def _prepare_experiment_directories(self):
-        logger.info('initializing experiment directories under {}'.format(self.exp_dir))
-
-        for dir_name in ['transformers', 'outputs', 'cache']:
-            os.makedirs(os.path.join(self.exp_dir, dir_name), exist_ok=True)
+        if not os.path.exists(os.path.join(self.exp_dir, 'outputs')):
+            logger.info('initializing experiment directories under {}'.format(self.exp_dir))
+            for dir_name in ['transformers', 'outputs']:
+                os.makedirs(os.path.join(self.exp_dir, dir_name), exist_ok=True)
 
         self.exp_dir_transformers = os.path.join(self.exp_dir, 'transformers')
         self.exp_dir_outputs = os.path.join(self.exp_dir, 'outputs')
-        self.exp_dir_cache = os.path.join(self.exp_dir, 'cache')
 
         self.exp_dir_transformers_step = os.path.join(self.exp_dir_transformers, self.name)
         self.exp_dir_outputs_step = os.path.join(self.exp_dir_outputs, '{}'.format(self.name))
-        self.exp_dir_cache_step = os.path.join(self.exp_dir_cache, '{}'.format(self.name))
 
     def _cached_fit_transform(self, step_inputs):
         if self.is_trainable:
@@ -455,9 +457,8 @@ class Step:
             step_output_data = self.transformer.transform(**step_inputs)
 
         if self.cache_output:
-            logger.info('Step {}, caching output to the {}'
-                        .format(self.name, self.exp_dir_cache_step))
-            self._persist_output(step_output_data, self.exp_dir_cache_step)
+            logger.info('Step {}, caching output...'.format(self.name))
+            self.output = step_output_data
         if self.persist_output:
             logger.info('Step {}, persisting output to the {}'
                         .format(self.name, self.exp_dir_outputs_step))
@@ -465,7 +466,7 @@ class Step:
         return step_output_data
 
     def _load_output(self, filepath):
-        logger.info('Step {}, loading from {}'.format(self.name, filepath))
+        logger.info('Step {}, loading output from {}'.format(self.name, filepath))
         return joblib.load(filepath)
 
     def _persist_output(self, output_data, filepath):
@@ -480,15 +481,14 @@ class Step:
                 logger.info('Step {}, transforming...'.format(self.name))
                 step_output_data = self.transformer.transform(**step_inputs)
             else:
-                raise ValueError('No transformer cached {}'.format(self.name))
+                raise ValueError('No transformer persisted with name: {}'.format(self.name))
         else:
             logger.info('Step {}, transforming...'.format(self.name))
             step_output_data = self.transformer.transform(**step_inputs)
 
         if self.cache_output:
-            logger.info('Step {}, caching output to the {}'
-                        .format(self.name, self.exp_dir_cache_step))
-            self._persist_output(step_output_data, self.exp_dir_cache_step)
+            logger.info('Step {}, caching output...'.format(self.name))
+            self.output = step_output_data
         if self.persist_output:
             logger.info('Step {}, persisting output to the {}'
                         .format(self.name, self.exp_dir_outputs_step))
@@ -560,7 +560,7 @@ class Step:
 
 
 class BaseTransformer:
-    """Abstraction on two level fit and transform execution.
+    """Abstraction on ``fit`` and ``transform`` execution.
 
     Base transformer is an abstraction strongly inspired by the ``sklearn.Transformer`` and
     ``sklearn.Estimator``. Two main concepts are:
@@ -647,7 +647,7 @@ class BaseTransformer:
         Args:
             filepath (str): filepath where the transformer parameters should be persisted
         """
-        joblib.dump({}, filepath)
+        raise NotImplementedError
 
 
 class IdentityOperation(BaseTransformer):
@@ -656,6 +656,10 @@ class IdentityOperation(BaseTransformer):
 
     def transform(self, **kwargs):
         return kwargs
+
+    def persist(self, filepath):
+        logger.info('"IdentityOperation" is not persistable')
+        pass
 
 
 class StepsError(Exception):
@@ -666,6 +670,7 @@ def make_transformer(func):
     class StaticTransformer(BaseTransformer):
         def transform(self, *args, **kwargs):
             return func(*args, **kwargs)
+
     _transformer = StaticTransformer()
     _transformer.__class__.__name__ = func.__name__
     return _transformer
