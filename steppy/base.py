@@ -168,16 +168,18 @@ class Step:
                  input_data=None,
                  input_steps=None,
                  adapter=None,
-                 is_trainable=False,
+
+                 is_fittable=True,
+                 force_fitting=True,
+
                  cache_output=False,
                  persist_output=False,
                  load_persisted_output=False,
-                 force_fitting=False,
                  persist_upstream_pipeline_structure=False):
 
         name = self._validate_name(name, transformer)
 
-        if experiment_directory:
+        if experiment_directory is not None:
             assert isinstance(experiment_directory, str),\
                 'Step {} error, experiment_directory must ' \
                 'be str, got {} instead.'.format(name, type(experiment_directory))
@@ -207,22 +209,21 @@ class Step:
             'Step {} error, persist_upstream_pipeline_structure must be bool, got {} instead.' \
             .format(name, type(persist_upstream_pipeline_structure))
 
-        logger.info('initializing Step {}...'.format(name))
+        logger.info('Initializing Step {}...'.format(name))
 
         self.name = name
         self.transformer = transformer
-
         self.input_steps = input_steps or []
         self.input_data = input_data or []
         self.adapter = adapter
-        self.is_trainable = is_trainable
+        self.is_fittable = is_fittable
         self.cache_output = cache_output
         self.persist_output = persist_output
         self.load_persisted_output = load_persisted_output
         self.force_fitting = force_fitting
+
         self.exp_dir = os.path.join(experiment_directory)
         self.output = None
-
         self._prepare_experiment_directories()
 
         if persist_upstream_pipeline_structure:
@@ -275,7 +276,7 @@ class Step:
         """(bool): True if step outputs exists under the ``self.output``.
             See `cache_output`.
         """
-        if self.output:
+        if self.output is not None:
             return True
         else:
             return False
@@ -310,10 +311,10 @@ class Step:
             dict: Step outputs from the ``self.transformer.fit_transform`` method
         """
         if self.output_is_cached and not self.force_fitting:
-            logger.info('Step {} using cached output...'.format(self.name))
+            logger.info('Step {} using cached output'.format(self.name))
             step_output_data = self.output
         elif self.output_is_persisted and self.load_persisted_output and not self.force_fitting:
-            logger.info('Step {} loading persisted output...'.format(self.name))
+            logger.info('Step {} loading persisted output from {}'.format(self.name, self.exp_dir_outputs_step))
             step_output_data = self._load_output(self.exp_dir_outputs_step)
         else:
             step_inputs = {}
@@ -328,7 +329,7 @@ class Step:
                 step_inputs = self._adapt(step_inputs)
             else:
                 step_inputs = self._unpack(step_inputs)
-            step_output_data = self._cached_fit_transform(step_inputs)
+            step_output_data = self._fit_transform_operation(step_inputs)
         return step_output_data
 
     def transform(self, data):
@@ -360,7 +361,7 @@ class Step:
             logger.info('Step {} using cached output...'.format(self.name))
             step_output_data = self.output
         elif self.output_is_persisted and self.load_persisted_output:
-            logger.info('Step {} loading persisted output...'.format(self.name))
+            logger.info('Step {} loading persisted output from {}'.format(self.name, self.exp_dir_outputs_step))
             step_output_data = self._load_output(self.exp_dir_outputs_step)
         else:
             step_inputs = {}
@@ -381,14 +382,16 @@ class Step:
     def clean_cache_current_step(self):
         """Clean cache for current step.
         """
-        logger.info('cleaning cache...')
+        logger.info('Step {}, cleaning cache...'.format(self.name))
         self.output = None
         gc.collect()
 
     def clean_cache_pipeline(self):
         """Clean cache for all steps that are upstream to `self`.
         """
+        logger.info('Cleaning cache for the entire upstream pipeline...')
         for step in self.all_steps.values():
+            logger.info('Step {}, cleaning cache...'.format(step.name))
             step.output = None
             gc.collect()
 
@@ -436,28 +439,30 @@ class Step:
         self.exp_dir_outputs = os.path.join(self.exp_dir, 'outputs')
 
         self.exp_dir_transformers_step = os.path.join(self.exp_dir_transformers, self.name)
-        self.exp_dir_outputs_step = os.path.join(self.exp_dir_outputs, '{}'.format(self.name))
+        self.exp_dir_outputs_step = os.path.join(self.exp_dir_outputs, self.name)
 
-    def _cached_fit_transform(self, step_inputs):
-        if self.is_trainable:
+    def _fit_transform_operation(self, step_inputs):
+        if self.is_fittable:
             if self.transformer_is_persisted and not self.force_fitting:
                 logger.info('Step {}, loading transformer from the {}'
                             .format(self.name, self.exp_dir_transformers_step))
                 self.transformer.load(self.exp_dir_transformers_step)
                 logger.info('Step {}, transforming...'.format(self.name))
                 step_output_data = self.transformer.transform(**step_inputs)
+                logger.info('Step {}, transforming completed'.format(self.name))
             else:
                 logger.info('Step {}, fitting and transforming...'.format(self.name))
                 step_output_data = self.transformer.fit_transform(**step_inputs)
+                logger.info('Step {}, fitting and transforming completed'.format(self.name))
                 logger.info('Step {}, persisting transformer to the {}'
                             .format(self.name, self.exp_dir_transformers_step))
                 self.transformer.persist(self.exp_dir_transformers_step)
         else:
-            logger.info('Step {}, transforming...'.format(self.name))
+            logger.info('Step {}, is not fittable, transforming'.format(self.name))
             step_output_data = self.transformer.transform(**step_inputs)
-
+            logger.info('Step {}, transforming completed'.format(self.name))
         if self.cache_output:
-            logger.info('Step {}, caching output...'.format(self.name))
+            logger.info('Step {}, caching output'.format(self.name))
             self.output = step_output_data
         if self.persist_output:
             logger.info('Step {}, persisting output to the {}'
@@ -473,19 +478,22 @@ class Step:
         joblib.dump(output_data, filepath)
 
     def _cached_transform(self, step_inputs):
-        if self.is_trainable:
+        if self.is_fittable:
             if self.transformer_is_persisted:
                 logger.info('Step {}, loading transformer from the {}'
                             .format(self.name, self.exp_dir_transformers_step))
                 self.transformer.load(self.exp_dir_transformers_step)
                 logger.info('Step {}, transforming...'.format(self.name))
                 step_output_data = self.transformer.transform(**step_inputs)
+                logger.info('Step {}, transforming completed'.format(self.name))
             else:
-                raise ValueError('No transformer persisted with name: {}'.format(self.name))
+                raise ValueError('No transformer persisted with name: {}'
+                                 'Make sure that you have proper transformer under the directory: {}'
+                                 .format(self.name, self.exp_dir_transformers))
         else:
-            logger.info('Step {}, transforming...'.format(self.name))
+            logger.info('Step {}, is not fittable, transforming'.format(self.name))
             step_output_data = self.transformer.transform(**step_inputs)
-
+            logger.info('Step {}, transforming completed'.format(self.name))
         if self.cache_output:
             logger.info('Step {}, caching output...'.format(self.name))
             self.output = step_output_data
@@ -529,7 +537,7 @@ class Step:
         return all_steps
 
     def _validate_name(self, name, transformer):
-        if name:
+        if name is not None:
             assert isinstance(name, str), 'Step name must be str, got {} instead.'.format(type(name))
         else:
             name = transformer.__class__.__name__
@@ -566,7 +574,7 @@ class BaseTransformer:
     ``sklearn.Estimator``. Two main concepts are:
 
         1. Every action that can be performed on data (transformation, model training) can be
-        performed in two steps: fitting (where trainable parameters are estimated) and transforming
+        performed in two steps: fitting (where fittable parameters are estimated) and transforming
         (where previously estimated parameters are used to transform the data into desired state).
 
         2. Every transformer knows how it should be persisted and loaded (especially useful when
@@ -578,7 +586,7 @@ class BaseTransformer:
         self.estimator = None
 
     def fit(self, *args, **kwargs):
-        """Performs estimation of trainable parameters.
+        """Performs estimation of fittable parameters.
 
         All model estimations with sklearn, keras, pytorch models as well as some preprocessing
         techniques (normalization) estimate parameters based on data (training data).
@@ -626,7 +634,7 @@ class BaseTransformer:
         return self.transform(*args, **kwargs)
 
     def load(self, filepath):
-        """Loads the trainable parameters of the transformer.
+        """Loads the fittable parameters of the transformer.
 
         Specific implementation of loading persisted model parameters should be implemented here.
         In case of transformers that do not learn any parameters one can leave this method as is.
@@ -639,7 +647,7 @@ class BaseTransformer:
         return self
 
     def persist(self, filepath):
-        """Saves the trainable parameters of the transformer
+        """Saves the fittable parameters of the transformer
 
         Specific implementation of model parameter persistence should be implemented here.
         In case of transformers that do not learn any parameters one can leave this method as is.
