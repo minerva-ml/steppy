@@ -171,9 +171,9 @@ class Step:
 
                  is_fittable=True,
                  force_fitting=True,
+                 cache_output=True,
+                 persist_output=True,
 
-                 cache_output=False,
-                 persist_output=False,
                  load_persisted_output=False,
                  persist_upstream_pipeline_structure=False):
 
