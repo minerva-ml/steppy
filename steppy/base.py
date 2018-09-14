@@ -209,7 +209,7 @@ class Step:
             'Step {} error, persist_upstream_pipeline_structure must be bool, got {} instead.' \
             .format(name, type(persist_upstream_pipeline_structure))
 
-        logger.info('Initializing Step {}...'.format(name))
+        logger.info('Initializing Step {}'.format(name))
 
         self.name = name
         self.transformer = transformer
@@ -358,7 +358,7 @@ class Step:
             dict: step outputs from the transformer.transform method
         """
         if self.output_is_cached:
-            logger.info('Step {} using cached output...'.format(self.name))
+            logger.info('Step {} using cached output'.format(self.name))
             step_output_data = self.output
         elif self.output_is_persisted and self.load_persisted_output:
             logger.info('Step {} loading persisted output from {}'.format(self.name, self.exp_dir_outputs_step))
@@ -382,16 +382,16 @@ class Step:
     def clean_cache_step(self):
         """Clean cache for current step.
         """
-        logger.info('Step {}, cleaning cache...'.format(self.name))
+        logger.info('Step {}, cleaning cache'.format(self.name))
         self.output = None
         gc.collect()
 
     def clean_cache_pipeline(self):
         """Clean cache for all steps that are upstream to `self`.
         """
-        logger.info('Cleaning cache for the entire upstream pipeline...')
+        logger.info('Cleaning cache for the entire upstream pipeline')
         for step in self.all_steps.values():
-            logger.info('Step {}, cleaning cache...'.format(step.name))
+            logger.info('Step {}, cleaning cache'.format(step.name))
             step.output = None
             gc.collect()
 
@@ -458,7 +458,7 @@ class Step:
                             .format(self.name, self.exp_dir_transformers_step))
                 self.transformer.persist(self.exp_dir_transformers_step)
         else:
-            logger.info('Step {}, is not fittable, transforming'.format(self.name))
+            logger.info('Step {}, is not fittable, transforming...'.format(self.name))
             step_output_data = self.transformer.transform(**step_inputs)
             logger.info('Step {}, transforming completed'.format(self.name))
         if self.cache_output:
@@ -484,11 +484,11 @@ class Step:
                                  'Make sure that you have proper transformer under the directory: {}'
                                  .format(self.name, self.exp_dir_transformers))
         else:
-            logger.info('Step {}, is not fittable, transforming'.format(self.name))
+            logger.info('Step {}, is not fittable, transforming...'.format(self.name))
             step_output_data = self.transformer.transform(**step_inputs)
             logger.info('Step {}, transforming completed'.format(self.name))
         if self.cache_output:
-            logger.info('Step {}, caching output...'.format(self.name))
+            logger.info('Step {}, caching output'.format(self.name))
             self.output = step_output_data
         if self.persist_output:
             logger.info('Step {}, persisting output to the {}'
@@ -504,7 +504,7 @@ class Step:
         joblib.dump(output_data, filepath)
 
     def _adapt(self, step_inputs):
-        logger.info('Step {}, adapting inputs...'.format(self.name))
+        logger.info('Step {}, adapting inputs'.format(self.name))
         try:
             return self.adapter.adapt(step_inputs)
         except AdapterError as e:
@@ -512,7 +512,7 @@ class Step:
             raise StepsError(msg) from e
 
     def _unpack(self, step_inputs):
-        logger.info('Step {}, unpacking inputs...'.format(self.name))
+        logger.info('Step {}, unpacking inputs'.format(self.name))
         unpacked_steps = {}
         key_to_step_names = defaultdict(list)
         for step_name, step_dict in step_inputs.items():
