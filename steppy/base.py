@@ -376,10 +376,10 @@ class Step:
                 step_inputs = self._adapt(step_inputs)
             else:
                 step_inputs = self._unpack(step_inputs)
-            step_output_data = self._cached_transform(step_inputs)
+            step_output_data = self._transform_operation(step_inputs)
         return step_output_data
 
-    def clean_cache_current_step(self):
+    def clean_cache_step(self):
         """Clean cache for current step.
         """
         logger.info('Step {}, cleaning cache...'.format(self.name))
@@ -470,14 +470,7 @@ class Step:
             self._persist_output(step_output_data, self.exp_dir_outputs_step)
         return step_output_data
 
-    def _load_output(self, filepath):
-        logger.info('Step {}, loading output from {}'.format(self.name, filepath))
-        return joblib.load(filepath)
-
-    def _persist_output(self, output_data, filepath):
-        joblib.dump(output_data, filepath)
-
-    def _cached_transform(self, step_inputs):
+    def _transform_operation(self, step_inputs):
         if self.is_fittable:
             if self.transformer_is_persisted:
                 logger.info('Step {}, loading transformer from the {}'
@@ -502,6 +495,13 @@ class Step:
                         .format(self.name, self.exp_dir_outputs_step))
             self._persist_output(step_output_data, self.exp_dir_outputs_step)
         return step_output_data
+
+    def _load_output(self, filepath):
+        logger.info('Step {}, loading output from {}'.format(self.name, filepath))
+        return joblib.load(filepath)
+
+    def _persist_output(self, output_data, filepath):
+        joblib.dump(output_data, filepath)
 
     def _adapt(self, step_inputs):
         logger.info('Step {}, adapting inputs...'.format(self.name))
@@ -676,6 +676,10 @@ class StepsError(Exception):
 
 def make_transformer(func):
     class StaticTransformer(BaseTransformer):
+        def persist(self, filepath):
+            logger.info('StaticTransformer is not persistable.'
+                        'By running "fit_transform()", you simply "transform()".')
+
         def transform(self, *args, **kwargs):
             return func(*args, **kwargs)
 
