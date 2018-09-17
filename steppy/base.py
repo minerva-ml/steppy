@@ -1,4 +1,3 @@
-import gc
 import os
 import pprint
 import shutil
@@ -171,13 +170,13 @@ class Step:
 
                  is_fittable=True,
                  force_fitting=True,
-                 cache_output=True,
                  persist_output=True,
 
+                 cache_output=False,
                  load_persisted_output=False,
                  persist_upstream_pipeline_structure=False):
 
-        name = self._validate_name(name, transformer)
+        name = self._format_step_name(name, transformer)
 
         if experiment_directory is not None:
             assert isinstance(experiment_directory, str),\
@@ -384,16 +383,14 @@ class Step:
         """
         logger.info('Step {}, cleaning cache'.format(self.name))
         self.output = None
-        gc.collect()
 
-    def clean_cache_pipeline(self):
+    def clean_cache_upstream_steps(self):
         """Clean cache for all steps that are upstream to `self`.
         """
         logger.info('Cleaning cache for the entire upstream pipeline')
         for step in self.all_steps.values():
             logger.info('Step {}, cleaning cache'.format(step.name))
             step.output = None
-            gc.collect()
 
     def get_step(self, name):
         """Extracts step by name from the pipeline.
@@ -420,26 +417,6 @@ class Step:
         assert isinstance(filepath, str), 'Step {} error, filepath must be str. Got {}' \
                                           ' instead'.format(self.name, type(filepath))
         persist_as_png(self.upstream_pipeline_structure, filepath)
-
-    def _copy_transformer(self, step, name, dirpath):
-        self.transformer = self.transformer.transformer
-
-        original_filepath = os.path.join(step.exp_dir, 'transformers', step.name)
-        copy_filepath = os.path.join(dirpath, 'transformers', name)
-        logger.info('copying transformer from {} to {}'.format(original_filepath, copy_filepath))
-        shutil.copyfile(original_filepath, copy_filepath)
-
-    def _prepare_experiment_directories(self):
-        if not os.path.exists(os.path.join(self.exp_dir, 'outputs')):
-            logger.info('initializing experiment directories under {}'.format(self.exp_dir))
-            for dir_name in ['transformers', 'outputs']:
-                os.makedirs(os.path.join(self.exp_dir, dir_name), exist_ok=True)
-
-        self.exp_dir_transformers = os.path.join(self.exp_dir, 'transformers')
-        self.exp_dir_outputs = os.path.join(self.exp_dir, 'outputs')
-
-        self.exp_dir_transformers_step = os.path.join(self.exp_dir_transformers, self.name)
-        self.exp_dir_outputs_step = os.path.join(self.exp_dir_outputs, self.name)
 
     def _fit_transform_operation(self, step_inputs):
         if self.is_fittable:
@@ -530,17 +507,49 @@ class Step:
                              for key, step_names in repeated_keys])
             raise StepsError(msg)
 
+    def _copy_transformer(self, step, name, dirpath):
+        self.transformer = self.transformer.transformer
+
+        original_filepath = os.path.join(step.exp_dir, 'transformers', step.name)
+        copy_filepath = os.path.join(dirpath, 'transformers', name)
+        logger.info('copying transformer from {} to {}'.format(original_filepath, copy_filepath))
+        shutil.copyfile(original_filepath, copy_filepath)
+
+    def _prepare_experiment_directories(self):
+        if not os.path.exists(os.path.join(self.exp_dir, 'outputs')):
+            logger.info('initializing experiment directories under {}'.format(self.exp_dir))
+            for dir_name in ['transformers', 'outputs']:
+                os.makedirs(os.path.join(self.exp_dir, dir_name), exist_ok=True)
+
+        self.exp_dir_transformers = os.path.join(self.exp_dir, 'transformers')
+        self.exp_dir_outputs = os.path.join(self.exp_dir, 'outputs')
+
+        self.exp_dir_transformers_step = os.path.join(self.exp_dir_transformers, self.name)
+        self.exp_dir_outputs_step = os.path.join(self.exp_dir_outputs, self.name)
+
     def _get_steps(self, all_steps):
         for input_step in self.input_steps:
             all_steps = input_step._get_steps(all_steps)
         all_steps[self.name] = self
         return all_steps
 
-    def _validate_name(self, name, transformer):
+    def _format_step_name(self, name, transformer):
+        self._validate_step_name(name=name)
         if name is not None:
-            assert isinstance(name, str), 'Step name must be str, got {} instead.'.format(type(name))
+            name = str(name)
         else:
             name = transformer.__class__.__name__
+        return '{}{}'.format(name, self._get_step_suffix(name))
+
+    def _validate_step_name(self, name):
+        if name is not None:
+            assert isinstance(name, str) or isinstance(name, float) or isinstance(name, int),\
+                'Step name must be str, float or int. Got {} instead.'.format(type(name))
+
+    def _get_step_suffix(self, name):
+        """returns suffix '_k'
+        Where 'k' is int that denotes highest increment of step with the same name.
+        """
         highest_id = 0
         for key in self.all_steps.keys():
             key_id = key.split('_')[-1]
@@ -548,7 +557,7 @@ class Step:
             if key_stripped == name:
                 if key_id > highest_id:
                     highest_id += 1
-        return '{}_{}'.format(name, highest_id)
+        return '_{}'.format(highest_id)
 
     def _build_structure_dict(self, structure_dict):
         for input_step in self.input_steps:
@@ -574,7 +583,7 @@ class BaseTransformer:
     ``sklearn.Estimator``. Two main concepts are:
 
         1. Every action that can be performed on data (transformation, model training) can be
-        performed in two steps: fitting (where fittable parameters are estimated) and transforming
+        performed in two steps: fitting (where trainable parameters are estimated) and transforming
         (where previously estimated parameters are used to transform the data into desired state).
 
         2. Every transformer knows how it should be persisted and loaded (especially useful when
@@ -586,7 +595,7 @@ class BaseTransformer:
         self.estimator = None
 
     def fit(self, *args, **kwargs):
-        """Performs estimation of fittable parameters.
+        """Performs estimation of trainable parameters.
 
         All model estimations with sklearn, keras, pytorch models as well as some preprocessing
         techniques (normalization) estimate parameters based on data (training data).
@@ -634,7 +643,7 @@ class BaseTransformer:
         return self.transform(*args, **kwargs)
 
     def load(self, filepath):
-        """Loads the fittable parameters of the transformer.
+        """Loads the trainable parameters of the transformer.
 
         Specific implementation of loading persisted model parameters should be implemented here.
         In case of transformers that do not learn any parameters one can leave this method as is.
@@ -647,7 +656,7 @@ class BaseTransformer:
         return self
 
     def persist(self, filepath):
-        """Saves the fittable parameters of the transformer
+        """Saves the trainable parameters of the transformer
 
         Specific implementation of model parameter persistence should be implemented here.
         In case of transformers that do not learn any parameters one can leave this method as is.
