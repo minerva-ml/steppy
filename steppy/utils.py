@@ -54,7 +54,7 @@ def get_logger():
         
             initialize_logger()
             logger = get_logger()
-            logger.info('My message inside pipeline')
+            logger.info('My message goes here')
             
         result looks like this:
         
@@ -68,16 +68,16 @@ def get_logger():
     return logging.getLogger('steppy')
 
 
-def display_pipeline(structure_dict):
+def display_upstream_structure(structure_dict):
     """Displays pipeline structure in the jupyter notebook.
 
     Args:
         structure_dict (dict): dict returned by
-            :func:`~steppy.base.Step.upstream_pipeline_structure`.
+            :func:`~steppy.base.Step.upstream_structure`.
     """
     graph = _create_graph(structure_dict)
     plt = Image(graph.create_png())
-    display(plt)
+    display((plt,))
 
 
 def persist_as_png(structure_dict, filepath):
@@ -85,7 +85,7 @@ def persist_as_png(structure_dict, filepath):
 
     Args:
         structure_dict (dict): dict returned by
-            :func:`~steppy.base.Step.upstream_pipeline_structure`
+            :func:`~steppy.base.Step.upstream_structure`
         filepath (str): filepath to which the png with pipeline visualization should be persisted
     """
     graph = _create_graph(structure_dict)
@@ -96,7 +96,7 @@ def _create_graph(structure_dict):
     """Creates pydot graph from the pipeline structure dict.
 
     Args:
-        structure_dict (dict): dict returned by step.upstream_pipeline_structure
+        structure_dict (dict): dict returned by step.upstream_structure
 
     Returns:
         graph (pydot.Dot): object representing upstream pipeline structure (with regard to the current Step).
