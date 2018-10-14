@@ -155,7 +155,7 @@ class Step:
 
         force_fitting (bool): If True, Step transformer will be fitted (via `fit_transform`)
             even if ``<experiment_directory>/transformers/<step_name>`` exists.
-            Default ``False``: do not force fitting of the transformer.
+            Default ``True``: fit transformer each time `fit_transform()` is called.
             Helpful when one wants to use ``persist_output=True`` and load ``persist_output=True``
             on a previous Step and fit current Step multiple times. This is a typical scenario
             for tuning hyperparameters for an ensemble model trained on the output from first
