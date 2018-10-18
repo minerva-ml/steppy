@@ -582,7 +582,7 @@ class Step:
 
                 logger.info('Step {}, transforming completed'.format(self.name))
             else:
-                raise ValueError('No transformer persisted with name: {}'
+                raise ValueError('No transformer persisted with name: {}. '
                                  'Make sure that you have this transformer under the directory: {}'
                                  .format(self.name, self.experiment_directory_transformers_step))
         else:
